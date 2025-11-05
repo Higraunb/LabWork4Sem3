@@ -14,6 +14,10 @@ if(NOT CMAKE_BUILD_TYPE) # проверка имеющихся у компиля
   set(CMAKE_BUILD_TYPE Release) #Если нет то устанавливаем Release
 endif()
 
+if(WIN32)
+    add_compile_options(/utf-8)
+endif()
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/TLists)
 
 add_subdirectory(TLists)

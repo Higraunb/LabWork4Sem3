@@ -1,429 +1,562 @@
 #include <initializer_list>
-#include <ostream>
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <functional>
+#include <stdexcept>
+
 using namespace std;
 
-template<class T>
+template <typename T>
+class TLists;
+
+template <typename T>
+class TListsNode
+{
+private:
+    T* elem;
+    TListsNode<T>* next;
+    TListsNode<T>* prev;
+public:
+    TListsNode() : elem(nullptr), next(this), prev(this) {}
+    explicit TListsNode(const T& value) : elem(new T(value)), next(this), prev(this) {};
+    TListsNode(const T& value, TListsNode<T>* nextNode, TListsNode<T>* prevNode)
+        : elem(new T(value)), next(nextNode), prev(prevNode) {}
+    TListsNode(const TListsNode<T>& other)
+    {
+        if(other.elem == nullptr)
+            elem = nullptr;
+        else
+        {
+            elem = new T(*(other.elem));
+        }
+        next = other.next;
+        prev = other.prev;
+    }
+    TListsNode(TListsNode<T>&& other) noexcept : elem(other.elem), next(other.next), prev(other.prev)
+    {
+        other.elem = nullptr;
+        other.next = nullptr;
+        other.prev = nullptr;
+    }
+    ~TListsNode()
+    {
+        if(elem)
+            delete elem;
+    }
+    TListsNode<T>& operator=(const TListsNode<T>& other)
+    {
+        if(this != &other)
+        {
+            if(elem != nullptr)
+                delete elem;
+            if(other.elem == nullptr)
+                elem = nullptr;
+            else
+                elem = new T(*(other.elem));
+            next = other.next;
+            prev = other.prev;
+        }
+        return *this;
+    }
+    TListsNode<T>& operator=(TListsNode<T>&& other) noexcept
+    {
+        if(this != &other)
+        {
+            if(elem != nullptr)
+                delete elem;
+            elem = other.elem;
+            next = other.next;
+            prev = other.prev;
+        }
+        return *this;
+    }
+
+    T* GetElem() const {return elem;}
+    TListsNode<T>* GetNext() const {return next;}
+    TListsNode<T>* GetPrev() const {return prev;}
+
+    void SetElem(const T& value)
+    {
+        if(elem != nullptr)
+            delete elem;
+        elem = new T(value);
+    }
+    void SetNext(TListsNode<T>* nextNode) {next = nextNode;}
+    void SetPrev(TListsNode<T>* prevNode) {prev = prevNode;}    
+
+};
+
+template<typename T>
+class TIterator
+{
+private:
+    TListsNode<T> * current;
+public:
+    TIterator(TListsNode<T> * node = nullptr): current(node){}
+    
+    T& operator*() const { return *(current->GetElem()); }
+    T* operator->() const { return current->GetElem(); }
+
+    TIterator& operator++() { current = current->GetNext(); return *this; }
+    TIterator& operator--() { current = current->GetPrev(); return *this; }
+
+    TIterator operator++(int) { TIterator tmp = *this; current = current->GetNext(); return tmp; }
+    TIterator operator--(int) { TIterator tmp = *this; current = current->GetPrev(); return tmp; }
+
+    bool operator!=(const TIterator& other) const { return current != other.current; }
+    bool operator==(const TIterator& other) const { return current == other.current; }
+
+    TListsNode<T>* GetCurrent() const { return current; }
+};
+
+template<typename T>
+class ConstTIterator
+{
+private:
+    TListsNode<T> * current;
+public:
+    ConstTIterator(TListsNode<T> * node = nullptr): current(node){}
+    
+    const T& operator*() const { return *(current->GetElem()); }
+    const T* operator->() const { return current->GetElem(); }
+
+    ConstTIterator& operator++() { current = current->GetNext(); return *this; }
+    ConstTIterator& operator--() { current = current->GetPrev(); return *this; }
+
+    ConstTIterator operator++(int) { ConstTIterator tmp = *this; current = current->GetNext(); return tmp; }
+    ConstTIterator operator--(int) { ConstTIterator tmp = *this; current = current->GetPrev(); return tmp; }
+
+    bool operator!=(const ConstTIterator& other) const { return current != other.current; }
+    bool operator==(const ConstTIterator& other) const { return current == other.current; }
+
+    TListsNode<T>* GetCurrent() const { return current; }
+};
+
+template <typename T>
 class TLists
 {
 private:
-    T* data;
-    size_t* right;
-    size_t* left;
-
-    size_t head;
-    size_t tail;
-    size_t capacity;
+    TListsNode<T>* head;
     size_t size;
-    int64_t free_list;
-    size_t GetHead() const;
-    size_t GetSize() const;
-    size_t GetCapacity() const;
-    size_t GetTail() const;
-    size_t GetFreeList() const;
+
+    void Incert(TListsNode<T>* node, TListsNode<T>* pos);
+    T Remove(TListsNode<T>* node);
+
 public:
     TLists();
-    TLists(size_t capacity_);
-    TLists(const TLists<T>& other);
-    TLists(TLists<T>&& other);
-    TLists(initializer_list<T> other);
-    ~TLists();
-    class TIterator 
-    {
-    private:
-        TLists<T>* list;
-        size_t current;
+    TLists(size_t size_);
+    TLists(TLists<T>& other);
+    TLists(TLists<T>&& other) noexcept;
+    TLists (std::initializer_list<T> ilist);
+    
+    TIterator<T> begin() noexcept;
+    ConstTIterator<T> begin() const noexcept;
+    TIterator<T> end() noexcept;
+    ConstTIterator<T> end() const noexcept;
+    
+    TLists<T>& operator = (const TLists<T>& other);
+    TLists<T>& operator = (TLists<T>&& other);
 
-    public:
-        TIterator() : list(nullptr), current(0) {}
-        TIterator(TLists<T>* l, size_t pos) : list(l), current(pos) {}
-
-        T& operator*() { return list->data[current]; }
-        T* operator->() { return &(list->data[current]); }
-
-        TIterator& operator++() {
-            current = list->right[current];
-            return *this;
-        }
-
-        TIterator operator++(int) {
-            TIterator tmp = *this;
-            current = list->right[current];
-            return tmp;
-        }
-
-        TIterator& operator--() {
-            current = list->left[current];
-            return *this;
-        }
-
-        TIterator operator--(int) {
-            TIterator tmp = *this;
-            current = list->left[current];
-            return tmp;
-        }
-
-        bool operator==(const TIterator& other) const {
-            return list == other.list && current == other.current;
-        }
-
-        bool operator!=(const TIterator& other) const {
-            return !(*this == other);
-        }
-        size_t getCurrent() const { return current; }
-    };
-    TIterator begin() { return TIterator(this, head); }
-    TIterator end() { return TIterator(this, tail); }
-
-    TLists<T> operator+(const TLists<T>& other);
-    TLists<T>& operator=(const TLists<T>& other);
-    TLists<T>& operator=(TLists<T>&& other);
     bool operator == (const TLists<T>& other);
     bool operator != (const TLists<T>& other);
-    
-    TIterator Insert(TIterator pos, const size_t& value);
 
-    void push_back(const T& value);
-    void push_front(const T& value);
+    T& operator[](size_t index);
+    void IncertAfter(TIterator<T> node, const T& value);
+    T RemoveElem(TIterator<T> node);
+    
+    void PushBack(const T& value);
+    void PushFront(const T& value);
+    T PopFront();
+    T PopBack();
 
     bool isEmpty() const;
     bool isFull() const;
-    template <class O>
-    friend ostream& operator<<(ostream& os, const TLists<O>& list);
+    void SetSize(size_t newSize);
+
+    size_t GetSize() const ;
+
+    size_t FindCountInputElem(const T& val);
+    vector<size_t> FindInputElem(const T& val);
+    template<typename Func>
+    void LamdaFunc(Func lambda);
+    
+    void SaveToFile(const string& filename) const;
+    void LoadFromFile(const string& filename);
+    
+    template<typename O>
+    friend ostream& operator << (ostream & out, const TLists<O>& other);
+    template<typename O>
+    friend istream& operator >>(istream & inp, const TLists<O>& other);
+    ~TLists();
 };
 
-template <class T>
-inline size_t TLists<T>::GetHead() const
+template <typename T>
+inline TLists<T>::TLists()
 {
-    return head;
+    head = new TListsNode<T>();
+    head->SetNext(head);
+    head->SetPrev(head);
+    size = 0;
 }
 
-template <class T>
+template <typename T>
+inline TLists<T>::TLists(size_t size_) 
+{
+    size = size_;
+    head = new TListsNode<T>();
+    head->SetNext(head);
+    head->SetPrev(head);
+}
+
+template <typename T>
+inline TLists<T>::TLists(TLists<T> &other)
+{
+    if(this != &other)
+    {
+        size = other.size;
+        head = new TListsNode(other.head);
+    }
+}
+
+template <typename T>
+inline TLists<T>::TLists(TLists<T> &&other) noexcept
+{
+    if(this != &other)
+    {
+        size = other.size;
+        head = new TListsNode(other.head);
+    }
+}
+
+template <typename T>
+inline TLists<T>::TLists(std::initializer_list<T> ilist)
+{
+  head = new TListsNode<T>();
+  head->SetNext(head);
+  head->SetPrev(head);
+  size = 0;
+
+  for (const auto& item : ilist) {
+    PushBack(item);
+  }
+}
+
+template <typename T>
+inline TIterator<T> TLists<T>::begin() noexcept
+{
+    return TIterator<T>(head->GetNext());
+}
+
+template <typename T>
+inline ConstTIterator<T> TLists<T>::begin() const noexcept
+{
+    return ConstTIterator<T>(head->GetNext());
+}
+
+template <typename T>
+inline TIterator<T> TLists<T>::end() noexcept
+{
+    return TIterator<T>(head);
+}
+
+template <typename T>
+inline ConstTIterator<T> TLists<T>::end() const noexcept
+{
+    return ConstTIterator<T>(head);
+}
+
+template <typename T>
+inline TLists<T> &TLists<T>::operator=(const TLists<T> &other)
+{  
+    if(this != &other)
+    {
+        if(head)
+            delete[] head;
+        head = new TListsNode(other.head);
+        size = other.size;
+    }
+    return *this;
+}
+
+template <typename T>
+inline TLists<T> &TLists<T>::operator=(TLists<T> &&other)
+{
+    if(this != &other)
+    {
+        head = new TListsNode(other.head);
+        size = other.size;
+        other.head = nullptr;
+        other.size = 0;
+    }
+    return *this;
+}
+
+template <typename T>
+inline bool TLists<T>::operator==(const TLists<T> &other)
+{
+    if(other.size == size)
+    {
+        auto it1 = begin();
+        auto it2 = other.begin();
+        while(it1 != end() && it2 != other.end())
+        {
+            if(*it1 != *it2)
+                return false;
+            ++it1;
+            ++it2;
+        }
+        return true;
+    }
+    return false;
+}
+
+template <typename T>
+inline bool TLists<T>::operator!=(const TLists<T> &other)
+{
+    return !(*this == other);
+}
+
+template <typename T>
+inline void TLists<T>::Incert(TListsNode<T> *node, TListsNode<T>* pos)
+{
+    node->SetNext(pos);
+    node->SetPrev(pos->GetPrev());
+    pos->GetPrev()->SetNext(node);
+    pos->SetPrev(node);
+    size++;
+}
+
+template <typename T>
+inline T TLists<T>::Remove(TListsNode<T> *node)
+{
+    T value = *(node->GetElem());
+    node->GetPrev()->SetNext(node->GetNext());
+    node->GetNext()->SetPrev(node->GetPrev());
+    delete node;
+    size--;
+    return value;
+}
+
+template <typename T>
+inline T &TLists<T>::operator[](size_t index)
+{
+    if(index >= size)
+        throw std::out_of_range("Index out of range");
+    TListsNode<T>* current = head->GetNext();
+    for(size_t i = 0; i < index; i++)   
+        current = current->GetNext();
+    return *(current->GetElem());
+}
+
+template <typename T>
+inline void TLists<T>::IncertAfter(TIterator<T> node, const T &value)
+{
+    Incert(new TListsNode<T>(value), node.GetCurrent()->GetNext());
+}
+
+template <typename T>
+inline T TLists<T>::RemoveElem(TIterator<T> node)
+{
+    return Remove(node.GetCurrent());
+}
+
+template <typename T>
+inline void TLists<T>::PushBack(const T &value)
+{
+    Incert(new TListsNode<T>(value), head);
+}
+
+template <typename T>
+inline void TLists<T>::PushFront(const T &value)
+{
+    Incert(new TListsNode<T>(value), head->GetNext());
+}
+
+template <typename T>
+inline T TLists<T>::PopFront()
+{
+    if(isEmpty())
+        throw std::out_of_range("List is empty");
+    return Remove(head->GetNext());
+}
+
+template <typename T>
+inline T TLists<T>::PopBack()
+{
+    if(isEmpty())
+        throw std::out_of_range("List is empty");
+    return Remove(head->GetPrev());
+}
+
+template <typename T>
+inline bool TLists<T>::isFull() const
+{
+    return false;
+}
+
+template <typename T>
 inline size_t TLists<T>::GetSize() const
 {
     return size;
 }
 
-template <class T>
-inline size_t TLists<T>::GetCapacity() const
+template <typename T>
+inline size_t TLists<T>::FindCountInputElem(const T &val)
 {
-    return capacity;
-}
-
-template <class T>
-inline size_t TLists<T>::GetTail() const
-{
-    return tail;
-}
-
-template <class T>
-inline size_t TLists<T>::GetFreeList() const
-{
-    return free_list;
-}
-
-template <class T>
-inline TLists<T>::TLists()
-{
-    data = nullptr;
-    right = nullptr;
-    left = nullptr;
-    capacity = 0;
-    head = 0;
-    size = 0;
-    tail = 0;
-    free_list = 0;
-}
-
-template <class T>
-inline TLists<T>::TLists(size_t capacity_)
-{
-    capacity = capacity_;
-    data = new T[capacity]{};
-    right = new size_t[capacity]{};
-    left = new size_t[capacity]{};
-    head = 0;
-    size = 0;
-    tail = capacity - 1;
-    free_list = 0;
-}
-
-template <class T>
-inline TLists<T>::TLists(const TLists<T> &other)
-{
-    if(other.capacity != 0)
+    size_t cout = 0;
+    for (auto it = begin(); it != end(); ++it)
     {
-        capacity =  other.capacity;
-        head = other.head;
-        size = other.size;
-        tail = other.tail;
-        free_list = other.free_list;
-        data = new T[capacity]{};
-        right = new size_t[capacity]{};
-        left = new size_t[capacity]{};
-        for (size_t i = 0; i < size; i++)
-        {
-            data[i] = other.data[i];
-            right[i] = other.right[i];
-            left[i] = other.left[i];
-        }
+        if(val == *it)
+            cout++;
     }
-    else
-    {
-        data = nullptr;
-        right = nullptr;
-        left = nullptr;
-        capacity = 0;
-        head = 0;
-        size = 0;
-        tail = 0;
-        free_list = 0;    
-    }
+    return cout;
 }
 
-template <class T>
-inline TLists<T>::TLists(TLists<T> &&other)
+template <typename T>
+inline vector<size_t> TLists<T>::FindInputElem(const T &val)
 {
-     if(other.capacity != 0)
-    {
-        capacity =  other.capacity;
-        head = other.head;
-        size = other.size;
-        tail = other.tail;
-        free_list = other.free_list;
-        data = new T[capacity]{};
-        right = new size_t[capacity]{};
-        left = new size_t[capacity]{};
-        data = other.data;
-        right = other.right;
-        left = other.left;
-    }
-    else
-    {
-        data = nullptr;
-        right = nullptr;
-        left = nullptr;
-        capacity = 0;
-        head = 0;
-        size = 0;
-        tail = 0;
-        free_list = 0;    
-    }
-    other.data = nullptr;
-    other.right = nullptr;
-    other.left = nullptr;
-    other.capacity = 0;
-    other.free_list = 0;
-    other.head = 0;
-    other.tail = 0; 
-}
-
-template <class T>
-inline TLists<T>::TLists(initializer_list<T> other)
-{
-    capacity = other.size();
-    data = new T[capacity]{};
-    right = new size_t[capacity]{};
-    left = new size_t[capacity]{};
-    
-    size = capacity;
-    head = 0;
-    tail = size - 1;
-    
     size_t i = 0;
-    for (const T& item : other)
+    vector<size_t> res;
+    for (auto it = begin(); it != end(); ++it)
     {
-        data[i] = item;
-        if (i > 0)
-            left[i] = i - 1;
-        if (i < size - 1)
-            right[i] = i + 1;
+        if(val == *it)
+            res.push_back(i);
         i++;
     }
-    
-    if (size > 0)
-    {
-        left[0] = size - 1;
-        right[size - 1] = 0;
-    }
+    return vector<size_t>(res);
 }
 
-template <class T>
-inline TLists<T>::~TLists()
-{
-    delete[] data;
-    delete[] right;
-    delete[] left;
-}
-
-template <class T>
-inline TLists<T> &TLists<T>::operator=(const TLists<T> &other)
-{
-    if (this != &other)
-    {
-        delete[] data;
-        delete[] right;
-        delete[] left;
-
-        if(other.capacity != 0)
-        {
-            capacity =  other.capacity;
-            head = other.head;
-            size = other.size;
-            tail = other.tail;
-            free_list = other.free_list;
-            data = new T[capacity]{};
-            right = new size_t[capacity]{};
-            left = new size_t[capacity]{};
-            for (size_t i = 0; i < size; i++)
-            {
-                data[i] = other.data[i];
-                right[i] = other.right[i];
-                left[i] = other.left[i];
-            }
-        }
-        else
-        {
-            data = nullptr;
-            right = nullptr;
-            left = nullptr;
-            capacity = 0;
-            head = 0;
-            size = 0;
-            tail = 0;
-            free_list = 0;    
-        }
-    }
-    return *this;
-}
-
-template <class T>
-inline TLists<T> &TLists<T>::operator=(TLists<T> &&other)
-{
-    if (this != &other)
-    {
-        if(other.capacity != 0)
-        {
-            capacity =  other.capacity;
-            head = other.head;
-            size = other.size;
-            tail = other.tail;
-            free_list = other.free_list;
-            data = other.data;
-            right = other.right;    
-            left = other.left;
-        }
-        else
-        {
-            data = nullptr;
-            right = nullptr;
-            left = nullptr;
-            capacity = 0;
-            head = 0;
-            size = 0;
-            tail = 0;
-            free_list = 0;    
-        }
-        other.data = nullptr;
-        other.right = nullptr;
-        other.left = nullptr;
-        other.capacity = 0;
-        other.free_list = 0;    
-        other.head = 0;
-        other.tail = 0;
-    }
-    return *this;
-}
-
-template <class T>
-inline TIterator TLists<T>::Insert(TIterator pos, const size_t& value)
-{
-    if (isFull())
-        throw std::out_of_range("List is full");
-    
-    size_t new_index = free_list;
-    free_list = right[free_list];
-    size_t position = pos.getCurrent();
-    if(position > size)
-        throw std::out_of_range("Invalid position");
-    data[new_index] = value;
-    right[new_index] = right[position];
-    left[new_index] = left[position];
-    right[left[position]] = new_index;
-    left[right[position]] = new_index;
-    if(position == tail)
-        tail = new_index;
-    size++;
-    return TIterator(this, new_index);
-}
-
-template <class T>
-inline void TLists<T>::push_back(const T &value)
-{
-    Insert(size, value);
-}
-
-template <class T>
-inline void TLists<T>::push_front(const T &value)
-{
-    Insert(value, 0);
-}
-
-template <class T>
+template <typename T>
 inline bool TLists<T>::isEmpty() const
 {
     return size == 0;
 }
 
-template <class T>
-inline bool TLists<T>::isFull() const
+template <typename T>
+inline void TLists<T>::SetSize(size_t newSize)
 {
-    return capacity == size;
-}
-
-template <class T>
-inline bool TLists<T>::operator==(const TLists<T> &other)
-{
-    if(other.size != size)
+    if (newSize < size)
     {
-        return false;
+        TListsNode<T>* current = head->GetNext();
+        size_t currentSize = 0;
+        
+        while (currentSize < newSize)
+        {
+            current = current->GetNext();
+            currentSize++;
+        }
+        
+        TListsNode<T>* last = head->GetPrev();
+        while (current != head)
+        {
+            TListsNode<T>* next = current->GetNext();
+            delete current;
+            current = next;
+        }
+        
+        last = head->GetPrev();
+        last->SetNext(head);
+        head->SetPrev(last);
     }
-    size_t current = head;
-    size_t other_current = other.head;
-    if (size == 0)
-        return true;
+    size = newSize;
+}
 
-    for (size_t i = 0; i < size; i++)
+template <typename T>
+template<typename Func>
+inline void TLists<T>::LamdaFunc(Func lambda)
+{
+    if (isEmpty())
+        return;
+        
+    TListsNode<T>* current = head->GetNext();
+    while (current != head)
     {
-        if (data[current] != other.data[other_current])
-            return false;
-        current = right[current];
-        other_current = other.right[other_current];
+        lambda(*(current->GetElem()));
+        current = current->GetNext();
     }
-    return true;
 }
 
-template <class T>
-inline bool TLists<T>::operator!=(const TLists<T> &other)
+template <typename T>
+inline void TLists<T>::SaveToFile(const string& filename) const
 {
-    return !(other == *this);
+    ofstream outFile(filename, ios::binary);
+    if (!outFile)
+        throw runtime_error("Could not open file for writing: " + filename);
+
+    // Записываем размер списка
+    outFile.write(reinterpret_cast<const char*>(&size), sizeof(size_t));
+
+    // Записываем каждый элемент
+    TListsNode<T>* current = head->GetNext();
+    while (current != head)
+    {
+        T element = *(current->GetElem());
+        outFile.write(reinterpret_cast<const char*>(&element), sizeof(T));
+        current = current->GetNext();
+    }
+    
+    outFile.close();
+    if (!outFile.good())
+        throw runtime_error("Error occurred while writing to file: " + filename);
 }
 
-template <class O>
-inline ostream& operator<<(ostream &os, const TLists<O> &list)
+template <typename T>
+inline void TLists<T>::LoadFromFile(const string& filename)
 {
-    if (list.size == 0) {
-        os << "{}";
-        return os;
+    ifstream inFile(filename, ios::binary);
+    if (!inFile)
+        throw runtime_error("Could not open file for reading: " + filename);
+
+    // Очищаем текущий список
+    while (!isEmpty())
+        PopFront();
+
+    // Читаем размер списка
+    size_t fileSize;
+    inFile.read(reinterpret_cast<char*>(&fileSize), sizeof(size_t));
+
+    // Читаем элементы
+    for (size_t i = 0; i < fileSize; ++i)
+    {
+        T element;
+        inFile.read(reinterpret_cast<char*>(&element), sizeof(T));
+        if (!inFile.good())
+            throw runtime_error("Error occurred while reading from file: " + filename);
+        PushBack(element);
     }
 
-    os << "{";
-    size_t current = list.head;
-    for (size_t i = 0; i < list.size; i++) {
-        os << list.data[current];
-        if (i < list.size - 1)
-            os << ", ";
-        current = list.right[current];
+    inFile.close();
+}
+
+template <typename T>
+inline TLists<T>::~TLists()
+{
+    if(head != nullptr)
+        delete head;
+}
+
+template <typename O>
+inline ostream &operator<<(ostream &out, const TLists<O> &other)
+{
+    if(!other.isEmpty())
+    {
+        out << "elements : "<< endl;
+        for (auto it = other.begin(); it != other.end(); ++it)
+            out << *it << " ";
+        out << endl << "size = " << other.GetSize();
     }
-    os << "}";
-    return os;
+    else
+        out << "list is empty";
+    return out;
+}
+
+template <typename O>
+inline istream &operator>>(istream &inp, const TLists<O> &other)
+{
+    O val = O();
+    cout << "Enter element";
+    inp >> val;
+    other.PushBack(val);
+    return inp;
 }
